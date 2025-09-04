@@ -188,7 +188,7 @@ in
     boot.initrd.postDeviceCommands = mkIf (flushes != { } && !config.boot.initrd.systemd.enable) (
       lib.concatStrings (
         lib.mapAttrsToList (
-          _: fs: if fs.fsType == "btrfs" then import ./btrfs-initrd.nix fs else abort "impossible"
+          _: fs: if fs.fsType == "btrfs" then import ./btrfs-scripted.nix fs else abort "impossible"
         ) (lib.filterAttrs (_: fs: nixosUtils.fsNeededForBoot fs) flushes)
       )
     );
@@ -204,18 +204,17 @@ in
           {
             "flush-${systemdMount}" = {
               description = "Flush ephemeral ${fs.mountPoint} filesystem in initrd";
-
               serviceConfig.Type = "oneshot";
               unitConfig.DefaultDependencies = "no";
-
               requiredBy = [ "${systemdMount}.mount" ];
               before = [ "${systemdMount}.mount" ];
-
               requires = [ "${systemdDevice}.device" ];
               after = [ "${systemdDevice}.device" ];
-
               script =
-                if fs.fsType == "btrfs" then import ./btrfs-initrd.nix { inherit pkgs; } fs else abort "impossible";
+                if fs.fsType == "btrfs" then
+                  import ./btrfs-systemd.nix { inherit pkgs; } fs
+                else
+                  abort "impossible";
             };
           }
         ) (lib.filterAttrs (_: fs: nixosUtils.fsNeededForBoot fs) flushes)
@@ -233,46 +232,41 @@ in
           {
             "flush-${systemdMount}" = {
               description = "Flush ephemeral ${fs.mountPoint} filesystem";
-
               serviceConfig.Type = "oneshot";
               unitConfig.DefaultDependencies = "no";
-
               requiredBy = [ "${systemdMount}.mount" ];
               before = [ "${systemdMount}.mount" ];
-
               requires = [ "${systemdDevice}.device" ];
               after = [ "${systemdDevice}.device" ];
-
               script =
-                if fs.fsType == "btrfs" then import ./btrfs-normal.nix { inherit pkgs; } fs else abort "impossible";
+                if fs.fsType == "btrfs" then import ./btrfs-booted.nix { inherit pkgs; } fs else abort "impossible";
             };
           }
         ) (lib.filterAttrs (_: fs: !nixosUtils.fsNeededForBoot fs) flushes)
       )
     );
 
-    assertions =
-      [
-        {
-          assertion =
-            let
-              activeSubvolumes = lib.mapAttrsToList (name: fs: fs.activeSubvolume) flushes;
-              normalized = lib.map lib.strings.normalizePath activeSubvolumes;
-              deduplicated = lib.lists.unique normalized;
-            in
-            builtins.length normalized == builtins.length deduplicated;
-          message = "Filesystems managed by flush must not share an activeSubvolume.";
-        }
-      ]
-      ++ lib.optional (lib.any ({ value, ... }: value.archive.enable) (lib.attrsToList flushes)) {
+    assertions = [
+      {
         assertion =
           let
-            filteredFlushes = lib.filter (fs: fs.archive.enable) (lib.mapAttrsToList (_: fs: fs) flushes);
-            archiveDirectories = lib.map (fs: lib.strings.normalizePath fs.archive.directory) filteredFlushes;
-            deduplicated = lib.lists.unique archiveDirectories;
+            activeSubvolumes = lib.mapAttrsToList (name: fs: fs.activeSubvolume) flushes;
+            normalized = lib.map lib.strings.normalizePath activeSubvolumes;
+            deduplicated = lib.lists.unique normalized;
           in
-          builtins.length archiveDirectories == builtins.length deduplicated;
-        message = "Filesystems managed by flush must not share archive directories, to avoid data loss.";
-      };
+          builtins.length normalized == builtins.length deduplicated;
+        message = "Filesystems managed by flush must not share an activeSubvolume.";
+      }
+    ]
+    ++ lib.optional (lib.any ({ value, ... }: value.archive.enable) (lib.attrsToList flushes)) {
+      assertion =
+        let
+          filteredFlushes = lib.filter (fs: fs.archive.enable) (lib.mapAttrsToList (_: fs: fs) flushes);
+          archiveDirectories = lib.map (fs: lib.strings.normalizePath fs.archive.directory) filteredFlushes;
+          deduplicated = lib.lists.unique archiveDirectories;
+        in
+        builtins.length archiveDirectories == builtins.length deduplicated;
+      message = "Filesystems managed by flush must not share archive directories, to avoid data loss.";
+    };
   };
 }

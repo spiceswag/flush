@@ -16,6 +16,8 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+# Flushing backend for scripted initrd, i.e. if !config.boot.initrd.systemd.enable
+
 { pkgs }:
 {
   # mountPoint,
