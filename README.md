@@ -1,5 +1,8 @@
 # Flush
 
+**WARNING: THIS WILL MOST LIKELY DELETE YOUR ENTIRE SYSTEM**
+see: [Issue #1](https://github.com/spiceswag/flush/issues/1)
+
 A quick and dirty NixOS module that will rotate any filesystems you assign to it.
 Rotate here means wiping (or archiving) an old filesystem, and replacing it with a clean one.
 This notion comes up, with different names in NixOS systems that follow impermanence setups,
