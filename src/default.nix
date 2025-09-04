@@ -166,7 +166,7 @@ in
     };
   };
 
-  config = mkIf (builtins.length (lib.attrsToList flushes) != 0) {
+  config = {
     fileSystems = lib.mapAttrs (name: fs: {
       inherit (fs)
         mountPoint
@@ -185,7 +185,7 @@ in
     }) flushes;
 
     # SCRIPTED INITRD IS UNTESTED; PLEASE REPORT FEEDBACK to https://github.com/spiceswag/flush/issues
-    boot.initrd.postDeviceCommands = mkIf (flushes != { } && !config.boot.initrd.systemd.enable) (
+    boot.initrd.postDeviceCommands = mkIf (!config.boot.initrd.systemd.enable) (
       lib.concatStrings (
         lib.mapAttrsToList (
           _: fs: if fs.fsType == "btrfs" then import ./btrfs-scripted.nix fs else abort "impossible"
@@ -193,7 +193,7 @@ in
       )
     );
 
-    boot.initrd.systemd.services = mkIf (flushes != { } && config.boot.initrd.systemd.enable) (
+    boot.initrd.systemd.services = mkIf config.boot.initrd.systemd.enable (
       lib.foldl' lib.mergeAttrs { } (
         lib.mapAttrsToList (
           _: fs:
@@ -217,33 +217,31 @@ in
                   abort "impossible";
             };
           }
-        ) (lib.filterAttrs (_: fs: nixosUtils.fsNeededForBoot fs) flushes)
+        ) (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes)
       )
     );
 
-    systemd.services = mkIf (lib.filterAttrs (_: fs: nixosUtils.fsNeededForBoot fs) flushes != { }) (
-      lib.foldl' lib.mergeAttrs { } (
-        lib.mapAttrsToList (
-          _: fs:
-          let
-            systemdMount = nixosUtils.escapeSystemdPath fs.mountPoint;
-            systemdDevice = nixosUtils.escapeSystemdPath fs.device;
-          in
-          {
-            "flush-${systemdMount}" = {
-              description = "Flush ephemeral ${fs.mountPoint} filesystem";
-              serviceConfig.Type = "oneshot";
-              unitConfig.DefaultDependencies = "no";
-              requiredBy = [ "${systemdMount}.mount" ];
-              before = [ "${systemdMount}.mount" ];
-              requires = [ "${systemdDevice}.device" ];
-              after = [ "${systemdDevice}.device" ];
-              script =
-                if fs.fsType == "btrfs" then import ./btrfs-booted.nix { inherit pkgs; } fs else abort "impossible";
-            };
-          }
-        ) (lib.filterAttrs (_: fs: !nixosUtils.fsNeededForBoot fs) flushes)
-      )
+    systemd.services = lib.foldl' lib.mergeAttrs { } (
+      lib.mapAttrsToList (
+        _: fs:
+        let
+          systemdMount = nixosUtils.escapeSystemdPath fs.mountPoint;
+          systemdDevice = nixosUtils.escapeSystemdPath fs.device;
+        in
+        {
+          "flush-${systemdMount}" = {
+            description = "Flush ephemeral ${fs.mountPoint} filesystem";
+            serviceConfig.Type = "oneshot";
+            unitConfig.DefaultDependencies = "no";
+            requiredBy = [ "${systemdMount}.mount" ];
+            before = [ "${systemdMount}.mount" ];
+            requires = [ "${systemdDevice}.device" ];
+            after = [ "${systemdDevice}.device" ];
+            script =
+              if fs.fsType == "btrfs" then import ./btrfs-booted.nix { inherit pkgs; } fs else abort "impossible";
+          };
+        }
+      ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
     );
 
     assertions = [
