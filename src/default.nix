@@ -87,6 +87,7 @@ let
 
         activeSubvolume = mkOption {
           type = types.addCheck types.singleLineStr (value: !(lib.strings.hasPrefix "/" value));
+          defaultText = "flush/@<escaped-mount-point>";
           description = ''
             The path of the subvolume that's actively mounted for the filesystem.
             You are encouraged to follow the default, or at least place your active
@@ -99,6 +100,7 @@ let
 
           directory = mkOption {
             type = nonEmptyWithoutTrailingSlash;
+            defaultText = "flush/archive/@<trimmed-mount-point>";
             description = ''
               The subvolume subdirectory to place flushed filesystem archives in.
               You are encouraged to follow the default, and adapt it if you plan on changing
@@ -112,7 +114,7 @@ let
               The naming format archived filesystems will follow.
               The format will be processed by the coreutils {command}`date` command.
             '';
-            default = "+%Y-%m-%-d_%H:%M:%S";
+            default = "%Y-%m-%-d_%H:%M:%S";
           };
 
           retentionDays = mkOption {
@@ -188,7 +190,12 @@ in
     boot.initrd.postDeviceCommands = mkIf (!config.boot.initrd.systemd.enable) (
       lib.concatStrings (
         lib.mapAttrsToList (
-          _: fs: if fs.fsType == "btrfs" then import ./btrfs-scripted.nix fs else abort "impossible"
+          _: fs:
+          if fs.fsType == "btrfs" then
+            "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+          # impossible due to the enum type
+          else
+            abort "impossible"
         ) (lib.filterAttrs (_: fs: nixosUtils.fsNeededForBoot fs) flushes)
       )
     );
@@ -212,7 +219,8 @@ in
               after = [ "${systemdDevice}.device" ];
               script =
                 if fs.fsType == "btrfs" then
-                  import ./btrfs-systemd.nix { inherit pkgs; } fs
+                  "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+                # impossible due to the enum type
                 else
                   abort "impossible";
             };
@@ -238,7 +246,11 @@ in
             requires = [ "${systemdDevice}.device" ];
             after = [ "${systemdDevice}.device" ];
             script =
-              if fs.fsType == "btrfs" then import ./btrfs-booted.nix { inherit pkgs; } fs else abort "impossible";
+              if fs.fsType == "btrfs" then
+                "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+              # impossible due to the enum type
+              else
+                abort "impossible";
           };
         }
       ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
