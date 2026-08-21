@@ -22,6 +22,7 @@
   coreutils,
   btrfs-progs,
   writeScriptBin,
+  util-linuxMinimal,
 }:
 {
   device,
@@ -36,7 +37,8 @@ assert fsType == "btrfs";
 
   $env.PATH = [
     "${coreutils}/bin",
-    "${btrfs-progs}/bin"
+    "${btrfs-progs}/bin",
+    "${util-linuxMinimal}/bin"
   ];
 
   def "delete subvolume" [
