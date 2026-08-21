@@ -168,123 +168,123 @@ in
     };
   };
 
-  config =
-    let
-      results =
-        lib.foldl'
-          (acc: elem: {
-            services = lib.foldAttrs acc.services elem.services;
-            storePaths = acc.storePaths ++ elem.storePaths;
-          })
-          {
-            services = { };
-            storePaths = [ ];
-          }
-          (
-            lib.mapAttrsToList (
-              _: fs:
-              let
-                systemdMount = nixosUtils.escapeSystemdPath ("/sysroot/" + fs.mountPoint);
-                systemdDevice = nixosUtils.escapeSystemdPath fs.device;
+  config = {
+    fileSystems = lib.mapAttrs (name: fs: {
+      inherit (fs)
+        mountPoint
+        device
+        fsType
+        neededForBoot
+        ;
+      options =
+        (
+          if fs.fsType == "btrfs" then
+            [ "subvol=${fs.activeSubvolume}" ]
+          else
+            throw "unsupported filesystem type"
+        )
+        ++ fs.addedOptions;
+    }) flushes;
 
-                script =
-                  if fs.fsType == "btrfs" then
-                    "${(pkgs.callPackage ./btrfs.nix { }) fs}"
-                  # impossible due to the enum type
-                  else
-                    abort "impossible";
-              in
-              {
-                services."flush-${systemdMount}" = {
-                  description = "Flush ephemeral ${fs.mountPoint} filesystem in initrd";
-                  serviceConfig.Type = "oneshot";
-                  unitConfig.DefaultDependencies = "no";
-                  requiredBy = [ "${systemdMount}.mount" ];
-                  before = [ "${systemdMount}.mount" ];
-                  requires = [ "${systemdDevice}.device" ];
-                  after = [ "${systemdDevice}.device" ];
-                  inherit script;
-                };
-                storePaths = [ script ];
-              }
-            ) (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes)
-          );
-      inherit (results) services storePaths;
-    in
-    {
-      fileSystems = lib.mapAttrs (name: fs: {
-        inherit (fs)
-          mountPoint
-          device
-          fsType
-          neededForBoot
-          ;
-        options =
-          (
-            if fs.fsType == "btrfs" then
-              [ "subvol=${fs.activeSubvolume}" ]
-            else
-              throw "unsupported filesystem type"
-          )
-          ++ fs.addedOptions;
-      }) flushes;
+    boot.initrd.systemd =
+      let
+        results =
+          lib.foldl'
+            (acc: elem: {
+              services = lib.foldAttrs acc.services elem.services;
+              storePaths = acc.storePaths ++ elem.storePaths;
+            })
+            {
+              services = { };
+              storePaths = [ ];
+            }
+            (
+              lib.mapAttrsToList (
+                _: fs:
+                let
+                  systemdMount = nixosUtils.escapeSystemdPath ("/sysroot/" + fs.mountPoint);
+                  systemdDevice = nixosUtils.escapeSystemdPath fs.device;
 
-      boot.initrd.systemd = mkIf config.boot.initrd.systemd.enable { inherit services storePaths; };
+                  script =
+                    if fs.fsType == "btrfs" then
+                      "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+                    # impossible due to the enum type
+                    else
+                      abort "impossible";
+                in
+                {
+                  services."flush-${systemdMount}" = {
+                    description = "Flush ephemeral ${fs.mountPoint} filesystem in initrd";
+                    serviceConfig.Type = "oneshot";
+                    unitConfig.DefaultDependencies = "no";
+                    requiredBy = [ "${systemdMount}.mount" ];
+                    before = [ "${systemdMount}.mount" ];
+                    requires = [ "${systemdDevice}.device" ];
+                    after = [ "${systemdDevice}.device" ];
+                    inherit script;
+                  };
+                  storePaths = [ script ];
+                }
+              ) (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes)
+            );
+        inherit (results) services storePaths;
+      in
+      mkIf config.boot.initrd.systemd.enable { inherit services storePaths; };
 
-      systemd.services = lib.foldl' lib.mergeAttrs { } (
-        lib.mapAttrsToList (
-          _: fs:
-          let
-            systemdMount = nixosUtils.escapeSystemdPath fs.mountPoint;
-            systemdDevice = nixosUtils.escapeSystemdPath fs.device;
-          in
-          {
-            services."flush-${systemdMount}" = {
-              description = "Flush ephemeral ${fs.mountPoint} filesystem";
-              serviceConfig.Type = "oneshot";
-              unitConfig.DefaultDependencies = "no";
-              requiredBy = [ "${systemdMount}.mount" ];
-              before = [ "${systemdMount}.mount" ];
-              requires = [ "${systemdDevice}.device" ];
-              after = [ "${systemdDevice}.device" ];
-              script =
-                if fs.fsType == "btrfs" then
-                  "${(pkgs.callPackage ./btrfs.nix { }) fs}"
-                # impossible due to the enum type
-                else
-                  abort "impossible";
-            };
-          }
-        ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
-      );
-
-      assertions = [
+    systemd.services = lib.foldl' lib.mergeAttrs { } (
+      lib.mapAttrsToList (
+        _: fs:
+        let
+          systemdMount = nixosUtils.escapeSystemdPath fs.mountPoint;
+          systemdDevice = nixosUtils.escapeSystemdPath fs.device;
+        in
         {
-          assertion =
-            (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes) != { }
-            -> config.boot.initrd.systemd.enable;
-          message = "Flush only supports systemd-based initrd setups";
+          "flush-${systemdMount}" = {
+            description = "Flush ephemeral ${fs.mountPoint} filesystem";
+            serviceConfig.Type = "oneshot";
+            unitConfig.DefaultDependencies = "no";
+            requiredBy = [ "${systemdMount}.mount" ];
+            before = [ "${systemdMount}.mount" ];
+            requires = [ "${systemdDevice}.device" ];
+            after = [ "${systemdDevice}.device" ];
+            script =
+              if fs.fsType == "btrfs" then
+                "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+              # impossible due to the enum type
+              else
+                abort "impossible";
+          };
         }
-        {
-          assertion =
-            let
-              activeSubvolumes = lib.mapAttrsToList (name: fs: fs.activeSubvolume) flushes;
-              normalized = lib.map lib.strings.normalizePath activeSubvolumes;
-              deduplicated = lib.lists.unique normalized;
-            in
-            builtins.length normalized == builtins.length deduplicated;
-          message = "Filesystems managed by flush must not share an activeSubvolume.";
-        }
-      ]
-      ++ lib.optional (lib.any ({ value, ... }: value.archive.enable) (lib.attrsToList flushes)) {
+      ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
+    );
+
+    assertions = [
+      {
+        assertion =
+          (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes) != { }
+          -> config.boot.initrd.systemd.enable;
+        message = "Flush only supports systemd-based initrd setups";
+      }
+      {
         assertion =
           let
-            filteredFlushes = lib.filter (fs: fs.archive.enable) (lib.mapAttrsToList (_: fs: fs) flushes);
-            archiveDirectories = lib.map (fs: lib.strings.normalizePath fs.archive.directory) filteredFlushes;
-            deduplicated = lib.lists.unique archiveDirectories;
+            activeSubvolumes = lib.mapAttrsToList (name: fs: fs.activeSubvolume) flushes;
+            normalized = lib.map lib.strings.normalizePath activeSubvolumes;
+            deduplicated = lib.lists.unique normalized;
           in
-          builtins.length archiveDirectories == builtins.length deduplicated;
-        message = "Filesystems managed by flush must not share archive directories, to avoid data loss.";
-      };
+          builtins.length normalized == builtins.length deduplicated;
+        message = "Filesystems managed by flush must not share an activeSubvolume.";
+      }
+    ]
+    ++ lib.optional (lib.any ({ value, ... }: value.archive.enable) (lib.attrsToList flushes)) {
+      assertion =
+        let
+          filteredFlushes = lib.filter (fs: fs.archive.enable) (lib.mapAttrsToList (_: fs: fs) flushes);
+          archiveDirectories = lib.map (fs: lib.strings.normalizePath fs.archive.directory) filteredFlushes;
+          deduplicated = lib.lists.unique archiveDirectories;
+        in
+        builtins.length archiveDirectories == builtins.length deduplicated;
+      message = "Filesystems managed by flush must not share archive directories, to avoid data loss.";
     };
+  };
 }
