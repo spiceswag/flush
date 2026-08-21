@@ -191,7 +191,7 @@ in
         results =
           lib.foldl'
             (acc: elem: {
-              services = lib.foldAttrs acc.services elem.services;
+              services = lib.mergeAttrs acc.services elem.services;
               storePaths = acc.storePaths ++ elem.storePaths;
             })
             {
