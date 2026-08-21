@@ -61,12 +61,12 @@ assert fsType == "btrfs";
     ^mount -t btrfs "${device}" $mount -o subvol="/";
 
     let active = $"($mount)/${activeSubvolume}";
-    mkdir -p $active;
+    mkdir $active;
 
     if ${lib.boolToString archive.enable} {
       # archive current flush
       if ($active | path exists) {
-        mkdir -p $"($mount)/${archive.directory}";
+        mkdir $"($mount)/${archive.directory}";
 
         let timestamp = (ls -lD $active).0.created
           | format date "${archive.format}";
