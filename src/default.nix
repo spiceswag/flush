@@ -221,7 +221,7 @@ in
                     before = [ "${systemdMount}.mount" ];
                     requires = [ "${systemdDevice}.device" ];
                     after = [ "${systemdDevice}.device" ];
-                    inherit script;
+                    script = lib.getExe script;
                   };
                   storePaths = [ script ];
                 }
