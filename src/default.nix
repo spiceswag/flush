@@ -192,7 +192,10 @@ in
           lib.foldl'
             (acc: elem: {
               services = lib.mergeAttrs acc.services elem.services;
-              storePaths = acc.storePaths ++ elem.storePaths;
+              storePaths =
+                acc.storePaths
+                ++ elem.storePaths
+                ++ lib.flatten (lib.map (pkg: pkg.dependencies or [ ]) elem.storePaths);
             })
             {
               services = { };

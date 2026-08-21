@@ -31,7 +31,7 @@
   ...
 }:
 assert fsType == "btrfs";
-writeScriptBin "flush-btrfs" ''
+(writeScriptBin "flush-btrfs" ''
   #!${nushell}/bin/nu
 
   $env.PATH = [
@@ -76,7 +76,7 @@ writeScriptBin "flush-btrfs" ''
 
       # remove old archives
       let old = ls -a $"($mount)/${archive.directory}"
-        | filter {|dir| (date now) - $dir.modified > ${builtins.toString archive.retentionDays}day };
+        | filter {|dir| (date now) - $dir.modified > ${toString archive.retentionDays}day };
 
       for dir in $old {
         delete subvolume $mount $"($mount)/${archive.directory}/($dir.name)";
@@ -91,4 +91,7 @@ writeScriptBin "flush-btrfs" ''
     ^umount $mount;
     rm $mount;
   }
-''
+'')
+// {
+  dependencies = [ nushell ];
+}
