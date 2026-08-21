@@ -250,12 +250,13 @@ in
             before = [ "${systemdMount}.mount" ];
             requires = [ "${systemdDevice}.device" ];
             after = [ "${systemdDevice}.device" ];
-            script =
+            script = lib.getExe (
               if fs.fsType == "btrfs" then
-                "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+                (pkgs.callPackage ./btrfs.nix { }) fs
               # impossible due to the enum type
               else
-                abort "impossible";
+                abort "impossible"
+            );
           };
         }
       ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
