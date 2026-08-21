@@ -186,20 +186,6 @@ in
         ++ fs.addedOptions;
     }) flushes;
 
-    # SCRIPTED INITRD IS UNTESTED; PLEASE REPORT FEEDBACK to https://github.com/spiceswag/flush/issues
-    boot.initrd.postDeviceCommands = mkIf (!config.boot.initrd.systemd.enable) (
-      lib.concatStrings (
-        lib.mapAttrsToList (
-          _: fs:
-          if fs.fsType == "btrfs" then
-            "${(pkgs.callPackage ./btrfs.nix { }) fs}"
-          # impossible due to the enum type
-          else
-            abort "impossible"
-        ) (lib.filterAttrs (_: fs: nixosUtils.fsNeededForBoot fs) flushes)
-      )
-    );
-
     boot.initrd.systemd.services = mkIf config.boot.initrd.systemd.enable (
       lib.foldl' lib.mergeAttrs { } (
         lib.mapAttrsToList (
@@ -257,6 +243,12 @@ in
     );
 
     assertions = [
+      {
+        assertion =
+          (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes) != { }
+          -> config.boot.initrd.systemd.enable;
+        message = "Flush only supports systemd-based initrd setups";
+      }
       {
         assertion =
           let
