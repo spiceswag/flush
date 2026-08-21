@@ -207,7 +207,7 @@ in
 
                   script =
                     if fs.fsType == "btrfs" then
-                      "${(pkgs.callPackage ./btrfs.nix { }) fs}"
+                      (pkgs.callPackage ./btrfs.nix { }) fs
                     # impossible due to the enum type
                     else
                       abort "impossible";
