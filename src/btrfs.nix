@@ -17,83 +17,30 @@
 */
 
 {
-  lib,
   nushell,
   coreutils,
   btrfs-progs,
-  writeScriptBin,
   util-linuxMinimal,
+  replaceVars,
+  runCommandLocal,
 }:
-{
-  device,
-  fsType,
-  activeSubvolume,
-  archive,
-  ...
-}:
-assert fsType == "btrfs";
-(writeScriptBin "flush-btrfs" ''
-  #!${nushell}/bin/nu
-
-  $env.PATH = [
-    "${coreutils}/bin",
-    "${btrfs-progs}/bin",
-    "${util-linuxMinimal}/bin"
-  ];
-
-  def "delete subvolume" [
-    mountPoint: string,
-    subvolume: string
-  ] {
-    let children = ^btrfs subvolume list -t -o /
-      | lines
-      | skip 2 # remove column names
-      | each { str replace -a -r '\s+' " " } # collapse whitespace
-      | split column " " id gen top_level relative_path; # path is relative to the btrfs root subvol
-
-    for subvol in $children {
-      delete subvolume $mountPoint $"($mountPoint)/($subvol.relative_path)"
-    }
-
-    ^btrfs subvolume delete $subvolume
+let
+  script = replaceVars ./btrfs.nu {
+    inherit
+      nushell
+      coreutils
+      btrfs-progs
+      util-linuxMinimal
+      ;
+  };
+in
+runCommandLocal "flush-btrfs"
+  {
+    meta.mainProgram = "flush-btrfs";
+    passthru.dependencies = [ nushell ];
   }
-
-  def main [] {
-    let mount = ^mktemp -d;
-    ^mount -t btrfs "${device}" $mount -o subvol="/";
-
-    let active = $"($mount)/${activeSubvolume}";
-    mkdir $active;
-
-    if ${lib.boolToString archive.enable} {
-      # archive current flush
-      if ($active | path exists) {
-        mkdir $"($mount)/${archive.directory}";
-
-        let timestamp = (ls -lD $active).0.created
-          | format date "${archive.format}";
-
-        mv $active $"($mount)/${archive.directory}/($timestamp)";
-      }
-
-      # remove old archives
-      let old = ls -a $"($mount)/${archive.directory}"
-        | filter {|dir| (date now) - $dir.modified > ${toString archive.retentionDays}day };
-
-      for dir in $old {
-        delete subvolume $mount $"($mount)/${archive.directory}/($dir.name)";
-      }
-    } else {
-      if ($active | path exists) {
-        delete subvolume $mount $active;
-      }
-    }
-
-    ^btrfs subvolume create $active;
-    ^umount $mount;
-    rm $mount;
-  }
-'')
-// {
-  dependencies = [ nushell ];
-}
+  ''
+    mkdir -p $out/bin
+    cp ${script} $out/bin/flush-btrfs
+    chmod +x $out/bin/flush-btrfs
+  ''

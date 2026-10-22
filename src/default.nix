@@ -39,123 +39,146 @@ let
     s: isNonEmpty s && (builtins.match ".+/" s) == null
   );
 
-  flushFsOpts =
-    { name, config, ... }:
-    {
-      options = {
-        mountPoint = mkOption {
-          example = "/";
-          type = nonEmptyWithoutTrailingSlash;
-          description = "Location of the mounted file system.";
-        };
-
-        device = mkOption {
-          default = null;
-          example = "/dev/sda";
-          type = types.nullOr types.nonEmptyStr;
-          description = "Location of the device.";
-        };
-
-        fsType = mkOption {
-          example = "btrfs";
-          type = types.enum [ "btrfs" ];
-          description = ''
-            The type of the filesystem to flush.
-            All supported filesystem types have some concept of a tree-like subvolume structure.
-          '';
-        };
-
-        addedOptions = mkOption {
-          default = [ "defaults" ];
-          example = [ "data=journal" ];
-          description = "Additional options given to mount the filesystem.";
-          type = types.nonEmptyListOf types.nonEmptyStr;
-        };
-
-        neededForBoot = mkOption {
-          type = types.bool;
-          description = ''
-            If set, this file system will be mounted in the initial ramdisk. Note that the
-            file system will always be mounted in the initial ramdisk if its mount point is
-            one of the following: `/`, `/nix`, `/nix/store`, `/var`, `/var/log`, `/var/lib`,
-            `/var/lib/nixos`, `/etc`, `/usr`.
-          '';
-          default = false;
-        };
-
-        # Flush settings
-
-        activeSubvolume = mkOption {
-          type = types.addCheck types.singleLineStr (value: !(lib.strings.hasPrefix "/" value));
-          defaultText = "flush/@<escaped-mount-point>";
-          description = ''
-            The path of the subvolume that's actively mounted for the filesystem.
-            You are encouraged to follow the default, or at least place your active
-            subvolume under a `flush/` subvolume directory as in the default.
-          '';
-        };
-
-        archive = {
-          enable = lib.mkEnableOption "archiving of flushed filesystems";
-
-          directory = mkOption {
-            type = nonEmptyWithoutTrailingSlash;
-            defaultText = "flush/archive/@<trimmed-mount-point>";
-            description = ''
-              The subvolume subdirectory to place flushed filesystem archives in.
-              You are encouraged to follow the default, and adapt it if you plan on changing
-              the {option}`activeSubvolume` option.
-            '';
-          };
-
-          format = mkOption {
-            type = types.addCheck types.singleLineStr (value: !(lib.strings.hasInfix "/" value));
-            description = ''
-              The naming format archived filesystems will follow.
-              The format will be processed by the coreutils {command}`date` command.
-            '';
-            default = "%Y-%m-%-d_%H:%M:%S";
-          };
-
-          retentionDays = mkOption {
-            type = types.ints.unsigned;
-            description = ''
-              The upper limit on how old flushed filesystem archives are kept, in days.
-            '';
-            default = 30;
-          };
-        };
+  flushFsOpts = { name, config, ... }: {
+    options = {
+      mountPoint = mkOption {
+        example = "/";
+        type = nonEmptyWithoutTrailingSlash;
+        description = "Location of the mounted file system.";
       };
 
-      config = {
-        mountPoint = lib.mkDefault name;
+      device = mkOption {
+        default = null;
+        example = "/dev/sda";
+        type = types.nullOr types.nonEmptyStr;
+        description = "Location of the device.";
+      };
 
-        activeSubvolume = lib.mkDefault (
-          # Systemd escaping of filesystem names
-          let
-            escaped = lib.strings.replaceStrings [ "/" "-" ] [ "-" "\\x2d" ] config.mountPoint;
-            trimmed =
-              if lib.strings.hasPrefix "-" escaped then
-                builtins.substring 1 (builtins.stringLength escaped) escaped
-              else
-                escaped;
-          in
-          "flush/@${trimmed}"
-        );
+      fsType = mkOption {
+        example = "btrfs";
+        type = types.enum [ "btrfs" ];
+        description = ''
+          The type of the filesystem to flush.
+          All supported filesystem types have some concept of a tree-like subvolume structure.
+        '';
+      };
 
-        archive.directory = lib.mkDefault (
-          let
-            escaped = lib.strings.replaceStrings [ "/" "-" ] [ "-" "\\x2d" ] config.mountPoint;
-            trimmed =
-              if lib.strings.hasPrefix "-" escaped then
-                builtins.substring 1 (builtins.stringLength escaped) escaped
-              else
-                escaped;
-          in
-          "flush/archive/@${trimmed}"
-        );
+      addedOptions = mkOption {
+        default = [ "defaults" ];
+        example = [ "data=journal" ];
+        description = "Additional options given to mount the filesystem.";
+        type = types.nonEmptyListOf types.nonEmptyStr;
+      };
+
+      neededForBoot = mkOption {
+        type = types.bool;
+        description = ''
+          If set, this file system will be mounted in the initial ramdisk. Note that the
+          file system will always be mounted in the initial ramdisk if its mount point is
+          one of the following: `/`, `/nix`, `/nix/store`, `/var`, `/var/log`, `/var/lib`,
+          `/var/lib/nixos`, `/etc`, `/usr`.
+        '';
+        default = false;
+      };
+
+      # Flush settings
+
+      activeSubvolume = mkOption {
+        type = types.addCheck types.singleLineStr (value: !(lib.strings.hasPrefix "/" value));
+        defaultText = "flush/@<escaped-mount-point>";
+        description = ''
+          The path of the subvolume that's actively mounted for the filesystem.
+          You are encouraged to follow the default, or at least place your active
+          subvolume under a `flush/` subvolume directory as in the default.
+        '';
+      };
+
+      archive = {
+        enable = lib.mkEnableOption "archiving of flushed filesystems";
+
+        directory = mkOption {
+          type = nonEmptyWithoutTrailingSlash;
+          defaultText = "flush/archive/@<trimmed-mount-point>";
+          description = ''
+            The subvolume subdirectory to place flushed filesystem archives in.
+            You are encouraged to follow the default, and adapt it if you plan on changing
+            the {option}`activeSubvolume` option.
+          '';
+        };
+
+        format = mkOption {
+          type = types.addCheck types.singleLineStr (value: !(lib.strings.hasInfix "/" value));
+          description = ''
+            The naming format archived filesystems will follow.
+            The format will be processed by the coreutils {command}`date` command.
+          '';
+          default = "%Y-%m-%-d_%H:%M:%S";
+        };
+
+        retentionDays = mkOption {
+          type = types.ints.unsigned;
+          description = ''
+            The upper limit on how old flushed filesystem archives are kept, in days.
+          '';
+          default = 30;
+        };
       };
     };
+
+    config = {
+      mountPoint = lib.mkDefault name;
+
+      activeSubvolume = lib.mkDefault (
+        # Systemd escaping of filesystem names
+        let
+          escaped = lib.strings.replaceStrings [ "/" "-" ] [ "-" "\\x2d" ] config.mountPoint;
+          trimmed =
+            if lib.strings.hasPrefix "-" escaped then
+              builtins.substring 1 (builtins.stringLength escaped) escaped
+            else
+              escaped;
+        in
+        "flush/@${trimmed}"
+      );
+
+      archive.directory = lib.mkDefault (
+        let
+          escaped = lib.strings.replaceStrings [ "/" "-" ] [ "-" "\\x2d" ] config.mountPoint;
+          trimmed =
+            if lib.strings.hasPrefix "-" escaped then
+              builtins.substring 1 (builtins.stringLength escaped) escaped
+            else
+              escaped;
+        in
+        "flush/archive/@${trimmed}"
+      );
+    };
+  };
+
+  makeExecutable =
+    fs:
+    if fs.fsType == "btrfs" then
+      pkgs.callPackage ./btrfs.nix { }
+    # impossible due to the enum type
+    else
+      abort "impossible";
+  makeScript =
+    fs:
+    if fs.fsType == "btrfs" then
+      ''
+        ${lib.getExe (pkgs.callPackage ./btrfs.nix { })} ${
+          lib.cli.toCommandLineShellGNU { } {
+            device = fs.device;
+            flush = fs.activeSubvolume;
+            archive = fs.archive.enable;
+            archiveDirectory = fs.archive.directory;
+            archiveFormat = fs.archive.format;
+            archiveRetention = "${toString fs.archive.retentionDays}day";
+          }
+        }
+      ''
+    else
+      abort "impossible";
 in
 {
   options = {
@@ -208,12 +231,8 @@ in
                   systemdMount = nixosUtils.escapeSystemdPath ("/sysroot/" + fs.mountPoint);
                   systemdDevice = nixosUtils.escapeSystemdPath fs.device;
 
-                  script =
-                    if fs.fsType == "btrfs" then
-                      (pkgs.callPackage ./btrfs.nix { }) fs
-                    # impossible due to the enum type
-                    else
-                      abort "impossible";
+                  executable = makeExecutable fs;
+                  script = makeScript fs;
                 in
                 {
                   services."flush-${systemdMount}" = {
@@ -224,9 +243,9 @@ in
                     before = [ "${systemdMount}.mount" ];
                     requires = [ "${systemdDevice}.device" ];
                     after = [ "${systemdDevice}.device" ];
-                    script = lib.getExe script;
+                    inherit script;
                   };
-                  storePaths = [ script ];
+                  storePaths = [ executable ];
                 }
               ) (lib.filterAttrs (_: fs: fs.neededForBoot || nixosUtils.fsNeededForBoot fs) flushes)
             );
@@ -250,13 +269,7 @@ in
             before = [ "${systemdMount}.mount" ];
             requires = [ "${systemdDevice}.device" ];
             after = [ "${systemdDevice}.device" ];
-            script = lib.getExe (
-              if fs.fsType == "btrfs" then
-                (pkgs.callPackage ./btrfs.nix { }) fs
-              # impossible due to the enum type
-              else
-                abort "impossible"
-            );
+            script = makeScript fs;
           };
         }
       ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
