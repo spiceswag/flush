@@ -237,18 +237,26 @@ in
                 {
                   services."flush-${systemdMount}" = {
                     description = "Flush ephemeral ${fs.mountPoint} filesystem in initrd";
-                    serviceConfig.Type = "oneshot";
+
                     unitConfig.DefaultDependencies = "no";
-                    requiredBy = [ "${systemdMount}.mount" ];
-                    before = [ "${systemdMount}.mount" ];
                     requires = [ "${systemdDevice}.device" ];
+                    requiredBy = [ "${systemdMount}.mount" ];
+
+                    before = [ "${systemdMount}.mount" ];
                     after = [
                       "${systemdDevice}.device"
                       # this is needed here otherwise resume from hibernate silently fails due to modified disk
                       # resumption failing is not consistent, as it's probably a race condition
                       "systemd-hibernate-resume.service"
                     ];
+
                     inherit script;
+                    serviceConfig = {
+                      Type = "oneshot";
+                      # without this flushing occurs twice per normal boot for some unknown reason
+                      # (after pivot root, where unit states are cleared, mounts are probably reinitialized)
+                      RemainAfterExit = true;
+                    };
                   };
                   storePaths = [ executable ];
                 }
@@ -268,13 +276,21 @@ in
         {
           "flush-${systemdMount}" = {
             description = "Flush ephemeral ${fs.mountPoint} filesystem";
-            serviceConfig.Type = "oneshot";
+
             unitConfig.DefaultDependencies = "no";
-            requiredBy = [ "${systemdMount}.mount" ];
-            before = [ "${systemdMount}.mount" ];
             requires = [ "${systemdDevice}.device" ];
+            requiredBy = [ "${systemdMount}.mount" ];
+
+            before = [ "${systemdMount}.mount" ];
             after = [ "${systemdDevice}.device" ];
+
             script = makeScript fs;
+            serviceConfig = {
+              Type = "oneshot";
+              # without this flushing occurs twice per normal boot for some unknown reason
+              # (after pivot root, where unit states are cleared, mounts are probably reinitialized)
+              RemainAfterExit = true;
+            };
           };
         }
       ) (lib.filterAttrs (_: fs: !fs.neededForBoot && !nixosUtils.fsNeededForBoot fs) flushes)
