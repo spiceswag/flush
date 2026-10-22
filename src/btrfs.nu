@@ -33,7 +33,7 @@ def "delete subvolume" [
         | split column " " id gen top_level relative_path # path is relative to the btrfs root subvol
 
     for subvol in $children {
-        delete subvolume $deviceMount $"($deviceMount)/($subvol.relative_path)"
+        delete subvolume $deviceMount $subvol.relative_path
     }
 
     ^btrfs subvolume delete $subvolume
