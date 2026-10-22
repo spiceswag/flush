@@ -72,6 +72,7 @@ def main [
         }
     }
     ^btrfs subvolume create $active
+    print $"Replaced subvolume ($flush) for device ($device)"
     ^umount $mount
     rm $mount
 }
@@ -94,6 +95,6 @@ def "delete subvolume" [
         delete subvolume $deviceMount $subvol.relative_path
     }
 
-    ^btrfs subvolume delete $subvolume
+    ^btrfs subvolume delete $"($deviceMount)/($subvolume)"
     print $"Deleted subvolume ($subvolume) on device mounted at ($deviceMount)"
 }
