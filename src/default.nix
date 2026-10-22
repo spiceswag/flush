@@ -242,7 +242,12 @@ in
                     requiredBy = [ "${systemdMount}.mount" ];
                     before = [ "${systemdMount}.mount" ];
                     requires = [ "${systemdDevice}.device" ];
-                    after = [ "${systemdDevice}.device" ];
+                    after = [
+                      "${systemdDevice}.device"
+                      # this is needed here otherwise resume from hibernate silently fails due to modified disk
+                      # resumption failing is not consistent, as it's probably a race condition
+                      "systemd-hibernate-resume.service"
+                    ];
                     inherit script;
                   };
                   storePaths = [ executable ];
